@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "laya-mcp"
+version = "0.1.0"
+description = "MCP server exposing the Laya calibrated decision model (convaiinnovations/laya)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "laya>=0.3.7",
+    "mcp>=2.2,<3",
+    "uvicorn>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "anyio>=4.0"]
+
+[project.scripts]
+laya-mcp = "laya_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/laya_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,27 @@
+# Long-running Laya MCP server over streamable HTTP (http://<host>:8000/mcp).
+#
+#   MCP_API_KEY=... docker compose up -d
+#   docker compose pull && docker compose up -d     # update to the latest published image
+services:
+  laya-mcp:
+    image: aydinozturk/laya-mcp:latest
+    pull_policy: always
+    ports:
+      - "${LAYA_MCP_PORT:-8000}:8000"
+    environment:
+      MCP_TRANSPORT: http
+      MCP_API_KEY: ${MCP_API_KEY:?set MCP_API_KEY}
+      LAYA_PRELOAD: "1"
+      LAYA_MODELS: english,multilingual
+      LAYA_THREADS: ${LAYA_THREADS:-4}
+      LAYA_DEFAULT: ${LAYA_DEFAULT:-english}
+    deploy:
+      resources:
+        limits:
+          memory: 6g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+    restart: unless-stopped
