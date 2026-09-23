@@ -17,6 +17,7 @@ Configuration (environment variables):
   LAYA_MAX_LOADED how many checkpoints stay resident         default: 2
   LAYA_THREADS    cap torch CPU threads                      default: torch default
   LAYA_DEFAULT    checkpoint for undecided language          default: english
+  LAYA_REQUIRE_GPU exit at startup if a preloaded checkpoint is not on CUDA (1/0)  default: 0
 """
 import contextlib
 import logging
@@ -77,8 +78,21 @@ class Engine:
     def preload(self):
         names = [m.strip() for m in os.environ.get("LAYA_MODELS", "english,multilingual").split(",") if m.strip()]
         log.info("preloading checkpoints: %s", names)
+        router = self.router()
         with contextlib.redirect_stdout(sys.stderr):
-            self.router().preload(names)
+            router.preload(names)
+            # One throwaway forward per checkpoint so CUDA context/kernel setup is not paid
+            # by the first real request.
+            warm = {"w": {"type": "noul", "instructions": "Is `text` a greeting?"}}
+            for name in names:
+                router.predict({"text": "hello"}, warm, model=name)
+        log.info("checkpoint devices: %s", self.devices())
+
+    def devices(self) -> Dict[str, str]:
+        """Where each loaded checkpoint actually runs. laya silently falls back to CPU when
+        CUDA is unavailable or out of memory, so this is the ground truth, not LAYA_DEVICE."""
+        agents = getattr(self._router, "_agents", None) or {}
+        return {name: str(agent.device) for name, agent in list(agents.items())}
 
     def predict(self, state: State, questions: Dict[str, Any], model: Optional[str] = None,
                 lang: Optional[str] = None) -> Dict[str, Any]:
@@ -316,8 +330,9 @@ async def laya_status() -> Dict[str, Any]:
     """Report which checkpoints are loaded in memory and the server configuration."""
     return {
         "loaded": engine.loaded(),
+        "devices": engine.devices(),
         "available": list(CHECKPOINTS),
-        "device": os.environ.get("LAYA_DEVICE") or "auto",
+        "requested_device": os.environ.get("LAYA_DEVICE") or "auto",
         "max_loaded": int(os.environ.get("LAYA_MAX_LOADED", "2")),
         "presets": list(PRESETS),
     }
@@ -359,7 +374,7 @@ def _serve_http(transport: str) -> None:
     # serving on 0.0.0.0 (e.g. inside a container), and on when bound to localhost.
     app = mcp.streamable_http_app(host=host) if transport == "http" else mcp.sse_app(host=host)
     app.router.routes.append(Route("/health", lambda _req: JSONResponse(
-        {"status": "ok", "loaded": engine.loaded()})))
+        {"status": "ok", "loaded": engine.loaded(), "devices": engine.devices()})))
     key = os.environ.get("MCP_API_KEY")
     asgi = _BearerAuth(app, key) if key else app
     if not key:
@@ -378,6 +393,12 @@ def main() -> None:
         transport = sys.argv[1]
     if _env_bool("LAYA_PRELOAD", False):
         engine.preload()
+        if _env_bool("LAYA_REQUIRE_GPU", False):
+            off_gpu = {n: d for n, d in engine.devices().items() if not d.startswith("cuda")}
+            if off_gpu:
+                raise SystemExit("LAYA_REQUIRE_GPU=1 but checkpoints are not on CUDA: %s. Check the "
+                                 "NVIDIA driver, nvidia-container-toolkit and the compose GPU "
+                                 "reservation, and use the :cuda image." % off_gpu)
     if transport == "stdio":
         mcp.run(transport="stdio")
     elif transport in ("http", "sse"):

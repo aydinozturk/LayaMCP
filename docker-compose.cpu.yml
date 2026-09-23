@@ -1,0 +1,13 @@
+# CPU override for hosts without an NVIDIA GPU:
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
+services:
+  laya-mcp:
+    image: aydinozturk/laya-mcp:latest
+    environment:
+      LAYA_DEVICE: cpu
+      LAYA_REQUIRE_GPU: "0"
+      LAYA_THREADS: ${LAYA_THREADS:-4}
+    deploy: !override
+      resources:
+        limits:
+          memory: 6g

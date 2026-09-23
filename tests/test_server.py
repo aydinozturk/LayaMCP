@@ -27,7 +27,10 @@ class FakeEngine:
                 "routing": {"model": "english", "reason": "stub", "detection": {"big": True}}}
 
     def loaded(self):
-        return []
+        return ["english"]
+
+    def devices(self):
+        return {"english": "cuda:0"}
 
 
 @pytest.fixture
@@ -95,3 +98,8 @@ def test_guard_preset_state_field(fake):
 def test_route_detects_non_latin():
     out = run(server.laya_route, {"body": "मुझसे दो बार शुल्क लिया गया"})
     assert out["model"] == "multilingual"
+
+
+def test_status_reports_actual_devices(fake):
+    out = run(server.laya_status)
+    assert out["devices"] == {"english": "cuda:0"} and out["loaded"] == ["english"]

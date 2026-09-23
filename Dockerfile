@@ -1,10 +1,16 @@
 # syntax=docker/dockerfile:1.7
-# Laya MCP server — CPU image with checkpoints baked in.
+# Laya MCP server with the english + multilingual checkpoints baked in (offline start).
 #
-#   docker buildx build --platform linux/amd64,linux/arm64 -t aydinozturk/laya-mcp:latest --push .
-#   docker build --build-arg LAYA_BAKE_MODELS=english -t laya-mcp:en .
-#   docker build --build-arg LAYA_BAKE_MODELS= --build-arg HF_HUB_OFFLINE=0 -t laya-mcp:slim .  # download on first use
-#   docker build --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu124 -t laya-mcp:cuda .
+#   CPU  (amd64 + arm64) -> aydinozturk/laya-mcp:latest
+#     docker buildx build --platform linux/amd64,linux/arm64 -t aydinozturk/laya-mcp:latest --push .
+#
+#   NVIDIA GPU (amd64, CUDA 12.6 wheels, needs host driver >= 525) -> aydinozturk/laya-mcp:cuda
+#     docker buildx build --platform linux/amd64 \
+#       --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu126 -t aydinozturk/laya-mcp:cuda --push .
+#
+#   Other options:
+#     --build-arg LAYA_BAKE_MODELS=english,multilingual,typed-decisions   # bake all three
+#     --build-arg LAYA_BAKE_MODELS= --build-arg HF_HUB_OFFLINE=0          # slim, download on first use
 
 FROM python:3.12-slim AS base
 

@@ -18,30 +18,55 @@ Laya metin üretmez. Bir **state** (metin veya JSON) ve **tipli sorular** alır,
 
 Resource: `laya://presets/{name}`, bir preset'in soru tanımlarını döner. `laya_decide` için şablon olarak kullanılabilir.
 
-## Docker imajı
+## Docker imajları
 
-Yayınlanan imaj: [`aydinozturk/laya-mcp`](https://hub.docker.com/r/aydinozturk/laya-mcp) (`linux/amd64` + `linux/arm64`).
-
-```bash
-docker pull aydinozturk/laya-mcp:latest
-```
-
-Kendin build edip yayınlamak için:
-
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -t aydinozturk/laya-mcp:latest -t aydinozturk/laya-mcp:0.1.0 --push .
-```
-
-İmaj CPU sürümü torch ile gelir. `english` ve `multilingual` checkpoint'lerinin ağırlıkları (~1.5 GB) build sırasında indirilip imaja gömülür, yani container internetsiz de açılır. Build argümanları:
-
-| Argüman | Varsayılan | Açıklama |
+| Etiket | Platform | Ne için |
 |---|---|---|
-| `LAYA_BAKE_MODELS` | `english,multilingual` | İmaja gömülecek checkpoint'ler. Boş bırakılırsa ilk kullanımda indirilir |
-| `TORCH_INDEX` | CPU wheel index | GPU için ör. `https://download.pytorch.org/whl/cu124` |
+| `aydinozturk/laya-mcp:cuda` | `linux/amd64` | NVIDIA GPU'lu sunucu (CUDA 12.6, sürücü ≥ 525) |
+| `aydinozturk/laya-mcp:latest` | `linux/amd64`, `linux/arm64` | CPU (laptop, GPU'suz sunucu, stdio kullanımı) |
+
+Sürüm sabitlemek için `0.1.1-cuda` ve `0.1.1` etiketleri de var. İki imajda da `english` ve `multilingual` checkpoint'lerinin ağırlıkları (~1.5 GB) gömülüdür, container internetsiz açılır. Cevaplar iki imajda da aynıdır; GPU sadece hız kazandırır (tek soru T4'te ~35 ms, CPU'da ~200–450 ms).
+
+Kendin build etmek için:
 
 ```bash
-docker build --build-arg LAYA_BAKE_MODELS=english,multilingual,typed-decisions -t aydinozturk/laya-mcp:full .
+docker buildx build --platform linux/amd64 \
+  --build-arg TORCH_INDEX=https://download.pytorch.org/whl/cu126 \
+  -t aydinozturk/laya-mcp:cuda --push .
+docker buildx build --platform linux/amd64,linux/arm64 -t aydinozturk/laya-mcp:latest --push .
+```
+
+| Build argümanı | Varsayılan | Açıklama |
+|---|---|---|
+| `TORCH_INDEX` | CPU wheel index | GPU için `https://download.pytorch.org/whl/cu126` |
+| `LAYA_BAKE_MODELS` | `english,multilingual` | İmaja gömülecek checkpoint'ler. Boşsa ilk kullanımda indirilir (`HF_HUB_OFFLINE=0` ile) |
+
+## GPU sunucuda deployment
+
+Sunucuda NVIDIA sürücüsü ve [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) kurulu olmalı. Kontrol etmek için:
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.6.3-base-ubuntu24.04 nvidia-smi
+```
+
+Sonra sunucuya sadece [docker-compose.yml](docker-compose.yml) dosyasını kopyala:
+
+```bash
+MCP_API_KEY=gizli-anahtar docker compose up -d
+curl localhost:8000/health    # {"status":"ok","loaded":[...],"devices":{"english":"cuda:0","multilingual":"cuda:0"}}
+docker compose pull && docker compose up -d   # yeni sürüme güncelleme
+```
+
+- `MCP_API_KEY` zorunludur, tanımlı değilse compose başlamaz. Değerleri bir `.env` dosyasına da yazabilirsin.
+- `LAYA_REQUIRE_GPU=1` varsayılan olarak açıktır. laya, CUDA'yı bulamazsa sessizce CPU'ya düşer; bu ayar sayesinde container açık bir hata mesajıyla kapanır. `docker compose logs` ile nedenini görebilirsin.
+- Açılışta her checkpoint bir kez ısıtılır, böylece ilk istek CUDA başlatma maliyetini ödemez.
+- İsteğe bağlı değişkenler: `LAYA_MCP_PORT` (8000), `LAYA_GPU` (GPU indeksi, ör. `0`; varsayılan `all`), `LAYA_GPU_COUNT` (1), `LAYA_MODELS`, `LAYA_DEFAULT`.
+- VRAM: ağırlıklar GPU'da fp32 tutulur, hesap fp16 autocast ile yapılır. İki checkpoint yaklaşık 3–4 GB VRAM kullanır. Üçünü yüklemek için `LAYA_MODELS=english,multilingual,typed-decisions` ver; `typed-decisions` imajda gömülü olmadığından ilk açılışta indirilir, bunun için `HF_HUB_OFFLINE=0` da ekle.
+
+GPU'suz bir makinede aynı compose'u CPU imajıyla çalıştırmak için:
+
+```bash
+MCP_API_KEY=gizli-anahtar docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
 ```
 
 ## Projelerde kullanım
@@ -67,21 +92,14 @@ Ya da komut satırından ekleyin (`-s user` tüm projelerde geçerli olur):
 claude mcp add laya -s user -- docker run -i --rm -e LAYA_THREADS=4 aydinozturk/laya-mcp:latest
 ```
 
-stdio modunda her oturum kendi container'ını açar ve ilk çağrıda modeli belleğe yükler (CPU'da ~2–10 sn). Birden fazla proje veya istemci aynı anda kullanacaksa aşağıdaki HTTP modu daha uygundur.
+stdio modunda her oturum kendi container'ını açar ve ilk çağrıda modeli belleğe yükler (CPU'da ~2–10 sn). GPU sunucun varsa aşağıdaki HTTP bağlantısı hem daha hızlı hem de tüm projeler için ortaktır.
 
-### Paylaşımlı HTTP sunucusu (docker compose)
+### Paylaşımlı sunucuya bağlanma (HTTP)
 
-Sunucuya yalnızca [docker-compose.yml](docker-compose.yml) dosyasını kopyalamak yeterlidir, compose yayınlanan `aydinozturk/laya-mcp:latest` imajını çeker:
-
-```bash
-MCP_API_KEY=gizli-anahtar docker compose up -d
-docker compose pull && docker compose up -d   # yeni sürüme güncelleme
-```
-
-`MCP_API_KEY` zorunludur, tanımlı değilse compose başlamaz. Model açılışta belleğe yüklenir ve endpoint `http://<sunucu>:8000/mcp` olur (streamable HTTP). Sağlık kontrolü `GET /health` adresindedir. İsteğe bağlı değişkenler: `LAYA_MCP_PORT` (varsayılan 8000), `LAYA_THREADS`, `LAYA_DEFAULT`. Anahtarları bir `.env` dosyasına da yazabilirsin.
+[GPU sunucuda deployment](#gpu-sunucuda-deployment) bölümündeki gibi çalışan sunucuya bağlan:
 
 ```bash
-claude mcp add --transport http laya http://localhost:8000/mcp --header "Authorization: Bearer gizli-anahtar"
+claude mcp add --transport http laya -s user http://<sunucu>:8000/mcp --header "Authorization: Bearer gizli-anahtar"
 ```
 
 `.mcp.json` ile:
@@ -91,7 +109,7 @@ claude mcp add --transport http laya http://localhost:8000/mcp --header "Authori
   "mcpServers": {
     "laya": {
       "type": "http",
-      "url": "http://localhost:8000/mcp",
+      "url": "http://<sunucu>:8000/mcp",
       "headers": { "Authorization": "Bearer ${LAYA_MCP_KEY}" }
     }
   }
@@ -112,11 +130,12 @@ claude mcp add --transport http laya http://localhost:8000/mcp --header "Authori
 | `LAYA_PRELOAD` | `0` | `1` ise checkpoint'ler açılışta yüklenir (compose'da açık) |
 | `LAYA_MODELS` | `english,multilingual` | Preload edilecek checkpoint'ler |
 | `LAYA_MAX_LOADED` | `2` | Bellekte aynı anda tutulacak checkpoint sayısı (LRU) |
-| `LAYA_DEVICE` | otomatik | `cpu`, `cuda`, `mps` |
+| `LAYA_DEVICE` | otomatik | `cpu` veya `cuda` (GPU compose'da `cuda`) |
+| `LAYA_REQUIRE_GPU` | `0` | `1` ise checkpoint CUDA'da değilse container kapanır (GPU compose'da `1`) |
 | `LAYA_THREADS` | torch varsayılanı | CPU thread sınırı; fiziksel çekirdek sayısını aşmayın |
 | `LAYA_DEFAULT` | `english` | Dili tespit edilemeyen kısa Latin metinler için checkpoint. Çoğunlukla Türkçe trafikte `multilingual` yapın |
 
-Bellek: iki checkpoint yüklüyken container yaklaşık 3–4 GB RAM kullanır. Docker Desktop bellek limitinin buna yettiğinden emin olun.
+Bellek: CPU'da iki checkpoint yüklüyken container yaklaşık 3–4 GB RAM kullanır. `laya_status` aracı ve `/health` her checkpoint'in gerçekte hangi cihazda çalıştığını (`devices`) gösterir.
 
 ## Örnek çağrılar
 

@@ -1,27 +1,39 @@
-# Long-running Laya MCP server over streamable HTTP (http://<host>:8000/mcp).
+# Laya MCP server on an NVIDIA GPU, over streamable HTTP (http://<host>:8000/mcp).
+#
+# Host requirements: NVIDIA driver >= 525 and nvidia-container-toolkit
+# (check with: docker run --rm --gpus all nvidia/cuda:12.6.3-base-ubuntu24.04 nvidia-smi).
 #
 #   MCP_API_KEY=... docker compose up -d
-#   docker compose pull && docker compose up -d     # update to the latest published image
+#   docker compose pull && docker compose up -d                                   # update
+#   MCP_API_KEY=... docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d   # no GPU
 services:
   laya-mcp:
-    image: aydinozturk/laya-mcp:latest
+    image: aydinozturk/laya-mcp:cuda
     pull_policy: always
     ports:
       - "${LAYA_MCP_PORT:-8000}:8000"
     environment:
       MCP_TRANSPORT: http
       MCP_API_KEY: ${MCP_API_KEY:?set MCP_API_KEY}
+      LAYA_DEVICE: cuda
+      LAYA_REQUIRE_GPU: ${LAYA_REQUIRE_GPU:-1}
       LAYA_PRELOAD: "1"
-      LAYA_MODELS: english,multilingual
-      LAYA_THREADS: ${LAYA_THREADS:-4}
+      LAYA_MODELS: ${LAYA_MODELS:-english,multilingual}
+      LAYA_MAX_LOADED: "3"
       LAYA_DEFAULT: ${LAYA_DEFAULT:-english}
+      NVIDIA_VISIBLE_DEVICES: ${LAYA_GPU:-all}
     deploy:
       resources:
         limits:
-          memory: 6g
+          memory: 8g
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${LAYA_GPU_COUNT:-1}
+              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 5s
-      start_period: 120s
+      start_period: 180s
     restart: unless-stopped
