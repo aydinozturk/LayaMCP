@@ -1,6 +1,6 @@
 """End-to-end check: start the server over stdio (via Docker by default) and call every tool.
 
-    python scripts/smoke.py                       # docker run -i --rm laya-mcp:latest
+    python scripts/smoke.py                       # docker run -i --rm aydinozturk/laya-mcp:latest
     python scripts/smoke.py laya-mcp              # a locally installed server
 """
 import asyncio
@@ -12,7 +12,7 @@ import time
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-CMD = sys.argv[1:] or ["docker", "run", "-i", "--rm", "laya-mcp:latest"]
+CMD = sys.argv[1:] or ["docker", "run", "-i", "--rm", "aydinozturk/laya-mcp:latest"]
 
 CALLS = [
     ("laya_status", {}),

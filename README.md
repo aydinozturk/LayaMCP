@@ -1,33 +1,35 @@
 # Laya MCP
 
-[convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) karar modelini herhangi bir MCP istemcisine (Claude Code, Claude Desktop, Cursor, VS Code, …) araç olarak sunan MCP sunucusu.
+**English** | [Türkçe](README.tr.md)
 
-Laya metin üretmez. Bir **state** (metin veya JSON) ve **tipli sorular** alır, tek forward pass'te her soruya cevap ve kalibre edilmiş olasılık döner. 100+ dil desteklenir; Türkçe gibi İngilizce olmayan metinler otomatik olarak `multilingual` checkpoint'ine yönlendirilir. Tipik kullanım alanları: sınıflandırma, ticket/e-posta triage, LLM guardrail (jailbreak / prompt injection), moderasyon, istek yönlendirme.
+An MCP server that exposes the [convaiinnovations/laya](https://huggingface.co/convaiinnovations/laya) decision model as tools for any MCP client (Claude Code, Claude Desktop, Cursor, VS Code, …).
 
-## Araçlar
+Laya does not generate text. You give it a **state** (text or JSON) and **typed questions**, and it answers every question with a calibrated probability in a single forward pass. It supports 100+ languages, and non-English text is routed to the `multilingual` checkpoint automatically. Typical uses are classification, ticket and email triage, LLM guardrails (jailbreak and prompt injection detection), content moderation and request routing.
 
-| Araç | Ne yapar |
+## Tools
+
+| Tool | What it does |
 |---|---|
-| `laya_classify` | Metni verilen etiketlerden birine atar (`labels`: liste veya `{etiket: açıklama}`) |
-| `laya_yes_no` | Evet/hayır sorusu sorar, `p_yes` döner |
-| `laya_score` | Sıralı ölçekte puanlar (ör. `["sakin", "sinirli", "öfkeli"]`) |
-| `laya_decide` | Genel kullanım: birden çok `choice` / `score` / `noul` sorusunu tek çağrıda cevaplar |
-| `laya_preset` | Hazır soru setleri: `triage`, `email`, `guard`, `moderation`, `router` |
-| `laya_route` | Metnin hangi checkpoint'e gideceğini ve nedenini gösterir (model çalıştırmaz) |
-| `laya_status` | Bellekteki checkpoint'ler ve yapılandırma |
+| `laya_classify` | Assigns text to one of the given labels (`labels`: a list or `{label: description}`) |
+| `laya_yes_no` | Asks a yes/no question and returns `p_yes` |
+| `laya_score` | Rates text on an ordinal scale (e.g. `["calm", "annoyed", "furious"]`) |
+| `laya_decide` | General purpose: answers several `choice` / `score` / `noul` questions in one call |
+| `laya_preset` | Ready-made question sets: `triage`, `email`, `guard`, `moderation`, `router` |
+| `laya_route` | Shows which checkpoint a text would go to and why (runs no model) |
+| `laya_status` | Loaded checkpoints, the device each one runs on, and configuration |
 
-Resource: `laya://presets/{name}`, bir preset'in soru tanımlarını döner. `laya_decide` için şablon olarak kullanılabilir.
+Resource: `laya://presets/{name}` returns a preset's question definitions, which you can use as a template for `laya_decide`.
 
-## Docker imajları
+## Docker images
 
-| Etiket | Platform | Ne için |
+| Tag | Platform | For |
 |---|---|---|
-| `aydinozturk/laya-mcp:cuda` | `linux/amd64` | NVIDIA GPU'lu sunucu (CUDA 12.6, sürücü ≥ 525) |
-| `aydinozturk/laya-mcp:latest` | `linux/amd64`, `linux/arm64` | CPU (laptop, GPU'suz sunucu, stdio kullanımı) |
+| `aydinozturk/laya-mcp:cuda` | `linux/amd64` | Servers with an NVIDIA GPU (CUDA 12.6, driver ≥ 525) |
+| `aydinozturk/laya-mcp:latest` | `linux/amd64`, `linux/arm64` | CPU (laptops, GPU-less servers, stdio use) |
 
-Sürüm sabitlemek için `0.1.1-cuda` ve `0.1.1` etiketleri de var. İki imajda da `english` ve `multilingual` checkpoint'lerinin ağırlıkları (~1.5 GB) gömülüdür, container internetsiz açılır. Cevaplar iki imajda da aynıdır; GPU sadece hız kazandırır (tek soru T4'te ~35 ms, CPU'da ~200–450 ms).
+`0.1.1-cuda` and `0.1.1` tags are available for pinning. Both images bake in the weights of the `english` and `multilingual` checkpoints (~1.5 GB), so containers start without network access. Both images give the same answers; the GPU only makes them faster (about 35 ms per question on a T4, about 200–450 ms on CPU).
 
-Kendin build etmek için:
+To build them yourself:
 
 ```bash
 docker buildx build --platform linux/amd64 \
@@ -36,44 +38,44 @@ docker buildx build --platform linux/amd64 \
 docker buildx build --platform linux/amd64,linux/arm64 -t aydinozturk/laya-mcp:latest --push .
 ```
 
-| Build argümanı | Varsayılan | Açıklama |
+| Build argument | Default | Description |
 |---|---|---|
-| `TORCH_INDEX` | CPU wheel index | GPU için `https://download.pytorch.org/whl/cu126` |
-| `LAYA_BAKE_MODELS` | `english,multilingual` | İmaja gömülecek checkpoint'ler. Boşsa ilk kullanımda indirilir (`HF_HUB_OFFLINE=0` ile) |
+| `TORCH_INDEX` | CPU wheel index | For GPU: `https://download.pytorch.org/whl/cu126` |
+| `LAYA_BAKE_MODELS` | `english,multilingual` | Checkpoints to bake into the image. If empty, they are downloaded on first use (together with `HF_HUB_OFFLINE=0`) |
 
-## GPU sunucuda deployment
+## Deploying on a GPU server
 
-Sunucuda NVIDIA sürücüsü ve [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) kurulu olmalı. Kontrol etmek için:
+The server needs the NVIDIA driver and the [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). To check that Docker can see the GPU:
 
 ```bash
 docker run --rm --gpus all nvidia/cuda:12.6.3-base-ubuntu24.04 nvidia-smi
 ```
 
-Sonra sunucuya sadece [docker-compose.yml](docker-compose.yml) dosyasını kopyala:
+Then copy [docker-compose.yml](docker-compose.yml) to the server. It is the only file you need:
 
 ```bash
-MCP_API_KEY=gizli-anahtar docker compose up -d
+MCP_API_KEY=your-secret docker compose up -d
 curl localhost:8000/health    # {"status":"ok","loaded":[...],"devices":{"english":"cuda:0","multilingual":"cuda:0"}}
-docker compose pull && docker compose up -d   # yeni sürüme güncelleme
+docker compose pull && docker compose up -d   # update to the latest image
 ```
 
-- `MCP_API_KEY` zorunludur, tanımlı değilse compose başlamaz. Değerleri bir `.env` dosyasına da yazabilirsin.
-- `LAYA_REQUIRE_GPU=1` varsayılan olarak açıktır. laya, CUDA'yı bulamazsa sessizce CPU'ya düşer; bu ayar sayesinde container açık bir hata mesajıyla kapanır. `docker compose logs` ile nedenini görebilirsin.
-- Açılışta her checkpoint bir kez ısıtılır, böylece ilk istek CUDA başlatma maliyetini ödemez.
-- İsteğe bağlı değişkenler: `LAYA_MCP_PORT` (8000), `LAYA_GPU` (GPU indeksi, ör. `0`; varsayılan `all`), `LAYA_GPU_COUNT` (1), `LAYA_MODELS`, `LAYA_DEFAULT`.
-- VRAM: ağırlıklar GPU'da fp32 tutulur, hesap fp16 autocast ile yapılır. İki checkpoint yaklaşık 3–4 GB VRAM kullanır. Üçünü yüklemek için `LAYA_MODELS=english,multilingual,typed-decisions` ver; `typed-decisions` imajda gömülü olmadığından ilk açılışta indirilir, bunun için `HF_HUB_OFFLINE=0` da ekle.
+- `MCP_API_KEY` is required; compose refuses to start without it. You can also put the values in a `.env` file.
+- `LAYA_REQUIRE_GPU=1` is on by default. laya silently falls back to CPU when it cannot use CUDA; with this setting the container exits with a clear error instead. Run `docker compose logs` to see why.
+- Every checkpoint is warmed up once at startup, so the first request does not pay for CUDA initialisation.
+- Optional variables: `LAYA_MCP_PORT` (8000), `LAYA_GPU` (GPU index, e.g. `0`; default `all`), `LAYA_GPU_COUNT` (1), `LAYA_MODELS`, `LAYA_DEFAULT`.
+- VRAM: weights are kept in fp32 on the GPU and inference runs under fp16 autocast. Two checkpoints use about 3–4 GB of VRAM. To load all three, set `LAYA_MODELS=english,multilingual,typed-decisions`. `typed-decisions` is not baked into the image and is downloaded on first start, so also set `HF_HUB_OFFLINE=0`.
 
-GPU'suz bir makinede aynı compose'u CPU imajıyla çalıştırmak için:
+To run the same compose file with the CPU image on a machine without a GPU:
 
 ```bash
-MCP_API_KEY=gizli-anahtar docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
+MCP_API_KEY=your-secret docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
 ```
 
-## Projelerde kullanım
+## Using it in your projects
 
-### Claude Code (stdio, proje bazında)
+### Claude Code (stdio, per project)
 
-Projenin köküne `.mcp.json` ekleyin:
+Add a `.mcp.json` file to the project root:
 
 ```json
 {
@@ -86,30 +88,30 @@ Projenin köküne `.mcp.json` ekleyin:
 }
 ```
 
-Ya da komut satırından ekleyin (`-s user` tüm projelerde geçerli olur):
+Or add it from the command line (`-s user` makes it available in every project):
 
 ```bash
 claude mcp add laya -s user -- docker run -i --rm -e LAYA_THREADS=4 aydinozturk/laya-mcp:latest
 ```
 
-stdio modunda her oturum kendi container'ını açar ve ilk çağrıda modeli belleğe yükler (CPU'da ~2–10 sn). GPU sunucun varsa aşağıdaki HTTP bağlantısı hem daha hızlı hem de tüm projeler için ortaktır.
+In stdio mode every session starts its own container and loads the model on the first call (about 2–10 s on CPU). If you have a GPU server, the HTTP connection below is faster and shared across all projects.
 
-### Paylaşımlı sunucuya bağlanma (HTTP)
+### Connecting to a shared server (HTTP)
 
-[GPU sunucuda deployment](#gpu-sunucuda-deployment) bölümündeki gibi çalışan sunucuya bağlan:
+Connect to a server running as described in [Deploying on a GPU server](#deploying-on-a-gpu-server):
 
 ```bash
-claude mcp add --transport http laya -s user http://<sunucu>:8000/mcp --header "Authorization: Bearer gizli-anahtar"
+claude mcp add --transport http laya -s user http://<server>:8000/mcp --header "Authorization: Bearer your-secret"
 ```
 
-`.mcp.json` ile:
+With `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "laya": {
       "type": "http",
-      "url": "http://<sunucu>:8000/mcp",
+      "url": "http://<server>:8000/mcp",
       "headers": { "Authorization": "Bearer ${LAYA_MCP_KEY}" }
     }
   }
@@ -118,58 +120,62 @@ claude mcp add --transport http laya -s user http://<sunucu>:8000/mcp --header "
 
 ### Claude Desktop / Cursor
 
-`claude_desktop_config.json` veya `~/.cursor/mcp.json` dosyasındaki `mcpServers` altına, Claude Code bölümündeki stdio bloğunu olduğu gibi ekleyin.
+Add the stdio block from the Claude Code section under `mcpServers` in `claude_desktop_config.json` or `~/.cursor/mcp.json`.
 
-## Ortam değişkenleri
+## Environment variables
 
-| Değişken | Varsayılan | Açıklama |
+| Variable | Default | Description |
 |---|---|---|
-| `MCP_TRANSPORT` | `stdio` | `stdio`, `http` (streamable HTTP, `/mcp`) veya `sse` (`/sse`) |
-| `MCP_HOST` / `MCP_PORT` | `0.0.0.0` / `8000` | HTTP bağlama adresi |
-| `MCP_API_KEY` | – | Tanımlıysa HTTP istekleri `Authorization: Bearer <key>` ister |
-| `LAYA_PRELOAD` | `0` | `1` ise checkpoint'ler açılışta yüklenir (compose'da açık) |
-| `LAYA_MODELS` | `english,multilingual` | Preload edilecek checkpoint'ler |
-| `LAYA_MAX_LOADED` | `2` | Bellekte aynı anda tutulacak checkpoint sayısı (LRU) |
-| `LAYA_DEVICE` | otomatik | `cpu` veya `cuda` (GPU compose'da `cuda`) |
-| `LAYA_REQUIRE_GPU` | `0` | `1` ise checkpoint CUDA'da değilse container kapanır (GPU compose'da `1`) |
-| `LAYA_THREADS` | torch varsayılanı | CPU thread sınırı; fiziksel çekirdek sayısını aşmayın |
-| `LAYA_DEFAULT` | `english` | Dili tespit edilemeyen kısa Latin metinler için checkpoint. Çoğunlukla Türkçe trafikte `multilingual` yapın |
+| `MCP_TRANSPORT` | `stdio` | `stdio`, `http` (streamable HTTP, `/mcp`) or `sse` (`/sse`) |
+| `MCP_HOST` / `MCP_PORT` | `0.0.0.0` / `8000` | HTTP bind address |
+| `MCP_API_KEY` | – | If set, HTTP requests must send `Authorization: Bearer <key>` |
+| `LAYA_PRELOAD` | `0` | `1` loads the checkpoints at startup (on in compose) |
+| `LAYA_MODELS` | `english,multilingual` | Checkpoints to preload |
+| `LAYA_MAX_LOADED` | `2` | How many checkpoints stay in memory at once (LRU) |
+| `LAYA_DEVICE` | auto | `cpu` or `cuda` (`cuda` in the GPU compose file) |
+| `LAYA_REQUIRE_GPU` | `0` | `1` makes the container exit if a checkpoint is not on CUDA (`1` in the GPU compose file) |
+| `LAYA_THREADS` | torch default | CPU thread cap; keep it at or below the number of physical cores |
+| `LAYA_DEFAULT` | `english` | Checkpoint for short Latin-script text whose language cannot be detected. Set it to `multilingual` if most of your traffic is not English |
 
-Bellek: CPU'da iki checkpoint yüklüyken container yaklaşık 3–4 GB RAM kullanır. `laya_status` aracı ve `/health` her checkpoint'in gerçekte hangi cihazda çalıştığını (`devices`) gösterir.
+Memory: with two checkpoints loaded on CPU, the container uses about 3–4 GB of RAM. The `laya_status` tool and `/health` show the device each checkpoint actually runs on (`devices`).
 
-## Örnek çağrılar
+## Example calls
 
 ```jsonc
 // laya_classify
-{ "text": "Faturam iki kez kesildi, iade istiyorum.",
-  "labels": { "billing": "fatura, ödeme, iade", "technical": "hata, çökme", "other": "diğer" } }
-// -> { "label": "billing", "confidence": 0.9, "probabilities": {...}, "routing": {"model": "multilingual", ...} }
+{ "text": "I was billed twice for March, please refund the duplicate.",
+  "labels": { "billing": "invoices, payments, refunds", "technical": "bugs, outages", "other": "everything else" } }
+// -> { "label": "billing", "confidence": 0.95, "probabilities": {...}, "routing": {"model": "english", ...} }
 
 // laya_decide
-{ "state": { "subject": "Çift ödeme", "body": "Bugün iade etmezseniz aboneliği iptal ediyoruz." },
+{ "state": { "subject": "Duplicate charge", "body": "Refund it today or we cancel our plan." },
   "questions": {
     "churn":   { "type": "noul",  "instructions": "Does the user threaten to cancel?" },
     "urgency": { "type": "score", "instructions": "How urgent is `body`?", "criteria": ["not urgent", "soon", "critical"] } } }
 ```
 
-Soru tipleri:
+Question types:
 
-- **choice**: `criteria` bir `{anahtar: açıklama}` sözlüğüdür. 20'den az seçenekte iyi çalışır.
-- **score**: `criteria` düşükten yükseğe sıralı seviye açıklamalarından oluşan bir listedir. Beklenen seviye indeksini ondalık sayı olarak döner.
-- **noul**: evet olasılığını (0..1) döner. İngilizce checkpoint'te etiket yanlılığı olabildiği için `laya_yes_no` aracı tercih edilmelidir. Bu araç aynı soruyu nötr iki seçenekli bir `choice` olarak sorar.
+- **choice**: `criteria` is a `{key: description}` dictionary. Works well with fewer than 20 options.
+- **score**: `criteria` is a list of level descriptions ordered from low to high. Returns the expected level index as a float.
+- **noul**: returns the probability of "yes" (0..1). The English checkpoint can be biased by the option labels, so prefer the `laya_yes_no` tool, which asks the same question as a neutral two-option `choice`.
 
-## Sınırlamalar (upstream model kartından)
+## Limitations (from the upstream model card)
 
-- Base checkpoint'ler zero-shot'ta **aşırı özgüvenli** çalışır. Olasılıkları mutlak değer olarak değil göreli olarak yorumlayın ve kararlarınızı `confidence` alanına göre verin. Upstream'in `action.act_probability` alanı anlamlı sinyal taşımadığı için çıktıdan çıkarılmıştır.
-- 20'den fazla seçenekli `choice` sorularında doğruluk belirgin biçimde düşer. Seçenekleri iki aşamalı (kaba → ince) sorulara bölün.
-- En zayıf soru tipi `score`'dur.
-- `typed-decisions` checkpoint'i yalnızca `model: "typed-decisions"` ile açıkça seçildiğinde kullanılır. Varsayılan imajda gömülü değildir. İmaj offline modda (`HF_HUB_OFFLINE=1`) çalıştığı için kullanmak istersen ya `LAYA_BAKE_MODELS` ile imaja ekle ya da container'ı `-e HF_HUB_OFFLINE=0` ile başlat.
+- The base checkpoints are **over-confident** zero-shot. Read the probabilities as relative rather than absolute, and base decisions on the `confidence` field. The upstream `action.act_probability` field carries no useful signal, so this server drops it from its output.
+- Accuracy drops sharply for `choice` questions with more than 20 options. Split them into a two-step coarse-to-fine question.
+- `score` is the weakest question type.
+- The `typed-decisions` checkpoint is only used when selected explicitly with `model: "typed-decisions"`. It is not baked into the default images, and the images run in offline mode (`HF_HUB_OFFLINE=1`), so either add it with `LAYA_BAKE_MODELS` or start the container with `-e HF_HUB_OFFLINE=0`.
 
-## Geliştirme
+## Development
 
 ```bash
 python3.12 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-pytest                          # model yüklemeden araç testleri
-python scripts/smoke.py         # Docker imajıyla gerçek model üzerinde uçtan uca test
+pytest                          # tool tests without loading the model
+python scripts/smoke.py         # end-to-end test against the real model in the Docker image
 ```
+
+## License
+
+Apache 2.0, the same as the Laya model.
