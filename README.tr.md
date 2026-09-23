@@ -27,7 +27,7 @@ Resource: `laya://presets/{name}`, bir preset'in soru tanımlarını döner. `la
 | `aydinozturk/laya-mcp:cuda` | `linux/amd64` | NVIDIA GPU'lu sunucu (CUDA 12.6, sürücü ≥ 525) |
 | `aydinozturk/laya-mcp:latest` | `linux/amd64`, `linux/arm64` | CPU (laptop, GPU'suz sunucu, stdio kullanımı) |
 
-Sürüm sabitlemek için `0.1.1-cuda` ve `0.1.1` etiketleri de var. İki imajda da `english` ve `multilingual` checkpoint'lerinin ağırlıkları (~1.5 GB) gömülüdür, container internetsiz açılır. Cevaplar iki imajda da aynıdır; GPU sadece hız kazandırır (tek soru T4'te ~35 ms, CPU'da ~200–450 ms).
+Sürüm sabitlemek için `0.1.2-cuda` ve `0.1.2` etiketleri de var. İki imajda da `english` ve `multilingual` checkpoint'lerinin ağırlıkları (~1.5 GB) gömülüdür, container internetsiz açılır. Cevaplar iki imajda da aynıdır; GPU sadece hız kazandırır (tek soru T4'te ~35 ms, CPU'da ~200–450 ms).
 
 Kendin build etmek için:
 
@@ -64,6 +64,8 @@ docker compose pull && docker compose up -d   # yeni sürüme güncelleme
 - Açılışta her checkpoint bir kez ısıtılır, böylece ilk istek CUDA başlatma maliyetini ödemez.
 - İsteğe bağlı değişkenler: `LAYA_MCP_PORT` (8000), `LAYA_GPU` (GPU indeksi, ör. `0`; varsayılan `all`), `LAYA_GPU_COUNT` (1), `LAYA_MODELS`, `LAYA_DEFAULT`.
 - VRAM: ağırlıklar GPU'da fp32 tutulur, hesap fp16 autocast ile yapılır. İki checkpoint yaklaşık 3–4 GB VRAM kullanır. Üçünü yüklemek için `LAYA_MODELS=english,multilingual,typed-decisions` ver; `typed-decisions` imajda gömülü olmadığından ilk açılışta indirilir, bunun için `HF_HUB_OFFLINE=0` da ekle.
+
+Sorun giderme: Isınma sırasında `RuntimeError: Failed to find C compiler` hatası alırsan sebebi şudur: torch 2.14 ve sonrası bazı CUDA işlemlerini, ilk kullanımda C modülü derleyen Triton kernel'lerine yönlendirir. `0.1.2` ve sonraki imajlarda `TORCH_DISABLE_NATIVE_JIT=1` tanımlıdır (CUDA imajında ayrıca `gcc` de vardır). Güncellemek için `docker compose pull && docker compose up -d` yeterli.
 
 GPU'suz bir makinede aynı compose'u CPU imajıyla çalıştırmak için:
 

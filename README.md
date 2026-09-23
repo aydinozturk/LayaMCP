@@ -27,7 +27,7 @@ Resource: `laya://presets/{name}` returns a preset's question definitions, which
 | `aydinozturk/laya-mcp:cuda` | `linux/amd64` | Servers with an NVIDIA GPU (CUDA 12.6, driver ≥ 525) |
 | `aydinozturk/laya-mcp:latest` | `linux/amd64`, `linux/arm64` | CPU (laptops, GPU-less servers, stdio use) |
 
-`0.1.1-cuda` and `0.1.1` tags are available for pinning. Both images bake in the weights of the `english` and `multilingual` checkpoints (~1.5 GB), so containers start without network access. Both images give the same answers; the GPU only makes them faster (about 35 ms per question on a T4, about 200–450 ms on CPU).
+`0.1.2-cuda` and `0.1.2` tags are available for pinning. Both images bake in the weights of the `english` and `multilingual` checkpoints (~1.5 GB), so containers start without network access. Both images give the same answers; the GPU only makes them faster (about 35 ms per question on a T4, about 200–450 ms on CPU).
 
 To build them yourself:
 
@@ -64,6 +64,8 @@ docker compose pull && docker compose up -d   # update to the latest image
 - Every checkpoint is warmed up once at startup, so the first request does not pay for CUDA initialisation.
 - Optional variables: `LAYA_MCP_PORT` (8000), `LAYA_GPU` (GPU index, e.g. `0`; default `all`), `LAYA_GPU_COUNT` (1), `LAYA_MODELS`, `LAYA_DEFAULT`.
 - VRAM: weights are kept in fp32 on the GPU and inference runs under fp16 autocast. Two checkpoints use about 3–4 GB of VRAM. To load all three, set `LAYA_MODELS=english,multilingual,typed-decisions`. `typed-decisions` is not baked into the image and is downloaded on first start, so also set `HF_HUB_OFFLINE=0`.
+
+Troubleshooting: `RuntimeError: Failed to find C compiler` during warm-up comes from torch ≥ 2.14 routing some CUDA ops to Triton kernels that compile a C helper on first use. Images from `0.1.2` set `TORCH_DISABLE_NATIVE_JIT=1` (and the CUDA image also ships `gcc`), so run `docker compose pull && docker compose up -d` to update.
 
 To run the same compose file with the CPU image on a machine without a GPU:
 

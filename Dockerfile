@@ -15,20 +15,33 @@
 FROM python:3.12-slim AS base
 
 ARG TORCH_INDEX=https://download.pytorch.org/whl/cpu
+ARG TORCH_VERSION=2.14.0
+# TORCH_DISABLE_NATIVE_JIT: torch >= 2.14 routes some CUDA ops (e.g. the bmm in ModernBERT's
+# rotary embedding) to Triton kernels that JIT-compile a C helper on first use, which fails
+# in a slim image without a compiler. Disabling it keeps those ops on stock cuBLAS.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     HF_HOME=/opt/hf \
     USE_TF=0 \
-    TOKENIZERS_PARALLELISM=false
+    TOKENIZERS_PARALLELISM=false \
+    TORCH_DISABLE_NATIVE_JIT=1
 
-RUN pip install --index-url ${TORCH_INDEX} torch
+# CUDA builds also get a C compiler, so anything else that reaches Triton can still JIT.
+RUN case "$TORCH_INDEX" in \
+      */whl/cu*) apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev \
+                 && rm -rf /var/lib/apt/lists/* ;; \
+    esac
+
+RUN pip install --index-url ${TORCH_INDEX} torch==${TORCH_VERSION}
 
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install .
+# Pin the laya release the image was tested with; upstream ships often.
+ARG LAYA_VERSION=0.3.9
+RUN pip install . "laya==${LAYA_VERSION}"
 
 RUN useradd --create-home --uid 1000 laya && mkdir -p /opt/hf && chown laya /opt/hf
 USER laya
