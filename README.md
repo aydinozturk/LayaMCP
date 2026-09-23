@@ -120,6 +120,22 @@ With `.mcp.json`:
 }
 ```
 
+### Hermes Agent
+
+```bash
+hermes mcp add laya --url http://<server>:8000/mcp --auth header   # paste only the token when prompted
+hermes mcp test laya
+```
+
+Hermes only shows the model the tool descriptions, so it won't reach for Laya on its own. The [skills/laya-decisions](skills/laya-decisions/SKILL.md) skill tells the agent when to use Laya (batch triage, guardrails on untrusted text, routing, moderation), how to phrase questions, and how to act on `confidence`. To install it:
+
+```bash
+mkdir -p ~/.hermes/skills/productivity/laya-decisions
+cp skills/laya-decisions/SKILL.md ~/.hermes/skills/productivity/laya-decisions/
+```
+
+The same `SKILL.md` also works as a Claude Code skill (`~/.claude/skills/laya-decisions/SKILL.md`).
+
 ### Claude Desktop / Cursor
 
 Add the stdio block from the Claude Code section under `mcpServers` in `claude_desktop_config.json` or `~/.cursor/mcp.json`.

@@ -120,6 +120,22 @@ claude mcp add --transport http laya -s user http://<sunucu>:8000/mcp --header "
 }
 ```
 
+### Hermes Agent
+
+```bash
+hermes mcp add laya --url http://<sunucu>:8000/mcp --auth header   # sorduğunda sadece token'ı yapıştır
+hermes mcp test laya
+```
+
+Hermes modele yalnızca araç açıklamalarını gösterir, bu yüzden Laya'yı kendiliğinden kullanmaz. [skills/laya-decisions](skills/laya-decisions/SKILL.md) skill'i ajana Laya'yı ne zaman kullanacağını (toplu triage, güvenilmeyen metinde guardrail, yönlendirme, moderasyon), soruları nasıl yazacağını ve `confidence` değerine göre nasıl davranacağını anlatır. Kurmak için:
+
+```bash
+mkdir -p ~/.hermes/skills/productivity/laya-decisions
+cp skills/laya-decisions/SKILL.md ~/.hermes/skills/productivity/laya-decisions/
+```
+
+Aynı `SKILL.md` Claude Code skill'i olarak da çalışır (`~/.claude/skills/laya-decisions/SKILL.md`).
+
 ### Claude Desktop / Cursor
 
 `claude_desktop_config.json` veya `~/.cursor/mcp.json` dosyasındaki `mcpServers` altına, Claude Code bölümündeki stdio bloğunu olduğu gibi ekleyin.
