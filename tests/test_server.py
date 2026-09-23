@@ -1,6 +1,7 @@
 """Tool-level tests with the model stubbed out (no weights needed)."""
 import anyio
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from laya_mcp import server
 
@@ -11,6 +12,9 @@ class FakeEngine:
 
     def predict(self, state, questions, model=None, lang=None):
         self.calls.append((state, questions, model, lang))
+        for qid, q in questions.items():
+            if q["type"] == "score" and not isinstance(q.get("criteria"), list):
+                raise ValueError("question %r: a score question takes 'criteria' as a list" % qid)
         answers = {}
         for qid, q in questions.items():
             if q["type"] == "choice":
@@ -59,7 +63,7 @@ def test_classify_accepts_list_labels(fake):
 
 
 def test_classify_needs_two_labels(fake):
-    with pytest.raises(ValueError):
+    with pytest.raises(ToolError):
         run(server.laya_classify, "x", ["only"])
 
 
@@ -79,7 +83,7 @@ def test_score_maps_levels(fake):
 
 
 def test_empty_state_rejected(fake):
-    with pytest.raises(ValueError):
+    with pytest.raises(ToolError):
         run(server.laya_decide, "  ", {"x": {"type": "noul", "instructions": "?"}})
 
 
@@ -103,3 +107,26 @@ def test_route_detects_non_latin():
 def test_status_reports_actual_devices(fake):
     out = run(server.laya_status)
     assert out["devices"] == {"english": "cuda:0"} and out["loaded"] == ["english"]
+
+
+def test_score_dict_criteria_becomes_ordered_list(fake):
+    run(server.laya_decide, "x", {"s": {"type": "score", "instructions": "?",
+                                        "criteria": {"0": "low", "1": "mid", "2": "high"}}})
+    assert fake.calls[0][1]["s"]["criteria"] == ["low", "mid", "high"]
+
+
+def test_choice_list_criteria_becomes_dict(fake):
+    run(server.laya_decide, "x", {"c": {"type": "choice", "instructions": "?", "criteria": ["a", "b"]}})
+    assert fake.calls[0][1]["c"]["criteria"] == {"a": None, "b": None}
+
+
+def test_model_validation_error_reaches_caller(fake):
+    with pytest.raises(ToolError, match="takes 'criteria' as a list"):
+        run(server.laya_decide, "x", {"s": {"type": "score", "instructions": "?", "criteria": "low, high"}})
+
+
+def test_questions_schema_is_typed():
+    tool = next(t for t in anyio.run(server.mcp.list_tools) if t.name == "laya_decide")
+    q = tool.input_schema["properties"]["questions"]
+    assert "additionalProperties" in q
+    assert "Question" in str(tool.input_schema)

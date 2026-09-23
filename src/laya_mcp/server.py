@@ -28,6 +28,8 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 import anyio
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+from typing_extensions import NotRequired, TypedDict
 
 log = logging.getLogger("laya_mcp")
 
@@ -36,6 +38,36 @@ PRESETS = ("triage", "email", "guard", "moderation", "router")
 
 Model = Optional[Literal["english", "multilingual", "typed-decisions"]]
 State = Union[str, Dict[str, Any], List[Any]]
+
+
+class Question(TypedDict):
+    """One typed question. The JSON schema generated from this is what the client's model sees."""
+
+    type: Literal["choice", "score", "noul"]
+    instructions: str
+    # choice: {"key": "description", ...}; score: ["lowest level", ..., "highest level"];
+    # noul: omit, or {"true": "...", "false": "..."}.
+    criteria: NotRequired[Union[Dict[str, Optional[str]], List[str]]]
+
+
+def _normalize_questions(questions: Dict[str, Any]) -> Dict[str, Any]:
+    """Fix the shapes LLM callers commonly get wrong, and reject the rest with a message the
+    caller can act on (ToolError text reaches the client; other exceptions are hidden)."""
+    if not isinstance(questions, dict) or not questions:
+        raise ToolError("questions must be a non-empty object of question id -> question")
+    out = {}
+    for qid, q in questions.items():
+        if not isinstance(q, dict):
+            raise ToolError("question %r must be an object with 'type' and 'instructions'" % qid)
+        q = dict(q)
+        crit = q.get("criteria")
+        if q.get("type") == "score" and isinstance(crit, dict):
+            # {"0": "low", "1": "high"} or {"low": "desc", ...}: keep insertion order as low -> high.
+            q["criteria"] = [str(v) if isinstance(v, str) and v else str(k) for k, v in crit.items()]
+        elif q.get("type") == "choice" and isinstance(crit, list):
+            q["criteria"] = {str(c): None for c in crit}
+        out[qid] = q
+    return out
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -129,8 +161,14 @@ mcp = MCPServer("laya", instructions=INSTRUCTIONS)
 async def _predict(state: State, questions: Dict[str, Any], model: Optional[str] = None,
                    lang: Optional[str] = None) -> Dict[str, Any]:
     if state is None or (isinstance(state, str) and not state.strip()):
-        raise ValueError("state must be non-empty text or a JSON object")
-    return await anyio.to_thread.run_sync(lambda: engine.predict(state, questions, model=model, lang=lang))
+        raise ToolError("state must be non-empty text or a JSON object")
+    questions = _normalize_questions(questions)
+    try:
+        return await anyio.to_thread.run_sync(lambda: engine.predict(state, questions, model=model, lang=lang))
+    except (ValueError, TypeError, KeyError) as e:
+        # laya validates questions with descriptive ValueErrors; surface them so the caller can fix
+        # the request instead of retrying blind.
+        raise ToolError(str(e)) from e
 
 
 def _compact(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -148,7 +186,7 @@ def _compact(result: Dict[str, Any]) -> Dict[str, Any]:
 @mcp.tool()
 async def laya_decide(
     state: State,
-    questions: Dict[str, Dict[str, Any]],
+    questions: Dict[str, Question],
     model: Model = None,
     lang: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -156,7 +194,8 @@ async def laya_decide(
 
     Args:
         state: Text, or a JSON object such as {"subject": "...", "body": "..."}.
-        questions: Map of question id -> definition. Examples:
+        questions: Map of question id -> definition. `criteria` must be a dict for choice
+            (key -> description) and a LIST ordered low -> high for score. Examples:
             {"department": {"type": "choice", "instructions": "Which team handles `body`?",
                             "criteria": {"billing": "invoices, refunds", "technical": "bugs", "other": "else"}},
              "urgency": {"type": "score", "instructions": "How urgent is it?",
@@ -186,7 +225,7 @@ async def laya_classify(
     """
     criteria = {str(l): None for l in labels} if isinstance(labels, list) else dict(labels)
     if len(criteria) < 2:
-        raise ValueError("labels needs at least two entries")
+        raise ToolError("labels needs at least two entries")
     state = {"text": text} if isinstance(text, str) else text
     res = await _predict(state, {"label": {"type": "choice", "instructions": instructions, "criteria": criteria}},
                          model=model, lang=lang)
@@ -253,7 +292,7 @@ async def laya_score(
     Returns the expected level (float, 0 = first level) and the per-level distribution.
     """
     if len(levels) < 2:
-        raise ValueError("levels needs at least two entries")
+        raise ToolError("levels needs at least two entries")
     state = {"text": text} if isinstance(text, str) else text
     res = await _predict(state, {"s": {"type": "score", "instructions": instructions, "criteria": levels}},
                          model=model, lang=lang)

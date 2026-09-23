@@ -27,7 +27,7 @@ Resource: `laya://presets/{name}`, bir preset'in soru tanımlarını döner. `la
 | `aydinozturk/laya-mcp:cuda` | `linux/amd64` | NVIDIA GPU'lu sunucu (CUDA 12.6, sürücü ≥ 525) |
 | `aydinozturk/laya-mcp:latest` | `linux/amd64`, `linux/arm64` | CPU (laptop, GPU'suz sunucu, stdio kullanımı) |
 
-Sürüm sabitlemek için `0.1.2-cuda` ve `0.1.2` etiketleri de var. İki imajda da `english` ve `multilingual` checkpoint'lerinin ağırlıkları (~1.5 GB) gömülüdür, container internetsiz açılır. Cevaplar iki imajda da aynıdır; GPU sadece hız kazandırır (tek soru T4'te ~35 ms, CPU'da ~200–450 ms).
+Sürüm sabitlemek için `0.1.3-cuda` ve `0.1.3` etiketleri de var. İki imajda da `english` ve `multilingual` checkpoint'lerinin ağırlıkları (~1.5 GB) gömülüdür, container internetsiz açılır. Cevaplar iki imajda da aynıdır; GPU sadece hız kazandırır (tek soru T4'te ~35 ms, CPU'da ~200–450 ms).
 
 Kendin build etmek için:
 

@@ -27,7 +27,7 @@ Resource: `laya://presets/{name}` returns a preset's question definitions, which
 | `aydinozturk/laya-mcp:cuda` | `linux/amd64` | Servers with an NVIDIA GPU (CUDA 12.6, driver ≥ 525) |
 | `aydinozturk/laya-mcp:latest` | `linux/amd64`, `linux/arm64` | CPU (laptops, GPU-less servers, stdio use) |
 
-`0.1.2-cuda` and `0.1.2` tags are available for pinning. Both images bake in the weights of the `english` and `multilingual` checkpoints (~1.5 GB), so containers start without network access. Both images give the same answers; the GPU only makes them faster (about 35 ms per question on a T4, about 200–450 ms on CPU).
+`0.1.3-cuda` and `0.1.3` tags are available for pinning. Both images bake in the weights of the `english` and `multilingual` checkpoints (~1.5 GB), so containers start without network access. Both images give the same answers; the GPU only makes them faster (about 35 ms per question on a T4, about 200–450 ms on CPU).
 
 To build them yourself:
 
